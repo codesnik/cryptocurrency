@@ -290,10 +290,24 @@ impl Api for CryptocurrencyApi {
             }
         };
 
+        // Gets status of the wallet corresponding to the public key.
+        let self_ = self.clone();
+        let wallet_transactions = move |req: &mut Request| -> IronResult<Response> {
+            let router = req.extensions.get::<Router>().unwrap();
+            let wallet_key = router.find("pub_key").unwrap();
+            let public_key = PublicKey::from_hex(wallet_key).map_err(ApiError::FromHex)?;
+            if let Some(wallet) = self_.get_wallet(&public_key) {
+                self_.ok_response(&serde_json::to_value(wallet).unwrap())
+            } else {
+                self_.not_found_response(&serde_json::to_value("Wallet not found").unwrap())
+            }
+        };
+
         // Bind the transaction handler to a specific route.
         router.post("/v1/wallets/transaction", transaction, "transaction");
         router.get("/v1/wallets", wallets_info, "wallets_info");
         router.get("/v1/wallet/:pub_key", wallet_info, "wallet_info");
+        router.get("/v1/wallet/:pub_key/transactions", wallet_transactions, "wallet_transactions");
     }
 }
 
