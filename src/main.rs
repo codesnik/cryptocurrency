@@ -15,6 +15,7 @@
 // Import crates with necessary types into a new project.
 
 extern crate serde;
+#[macro_use]
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
@@ -37,6 +38,7 @@ use exonum::api::{Api, ApiError};
 use iron::prelude::*;
 use iron::Handler;
 use router::Router;
+use serde_json::Value;
 
 // // // // // // // // // // CONSTANTS // // // // // // // // // //
 
@@ -158,6 +160,10 @@ impl Transaction for TxCreateWallet {
             schema.wallets().put(self.pub_key(), wallet)
         }
     }
+
+    fn info(&self) -> Value {
+        json!(self)
+    }
 }
 
 impl Transaction for TxTransfer {
@@ -184,6 +190,10 @@ impl Transaction for TxTransfer {
                 wallets.put(self.to(), receiver);
             }
         }
+    }
+
+    fn info(&self) -> Value {
+        json!(self)
     }
 }
 
