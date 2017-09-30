@@ -39,6 +39,8 @@ use iron::Handler;
 use router::Router;
 use serde_json::Value;
 
+use exonum::explorer::{BlockchainExplorer};
+
 // // // // // // // // // // CONSTANTS // // // // // // // // // //
 
 // Define service ID for the service trait.
@@ -224,6 +226,13 @@ impl CryptocurrencyApi {
             Some(wallets)
         }
     }
+
+    fn get_transaction(&self, hash_str: &str) -> Option<Value> {
+        let hash = Hash::from_hex(&hash_str).unwrap();
+        let explorer = BlockchainExplorer::new(&self.blockchain);
+        let info = explorer.tx_info(&hash).unwrap().unwrap().content;
+        Some(info)
+    }
 }
 
 /// Add an enum which joins transactions of both types to simplify request
@@ -273,6 +282,14 @@ impl Api for CryptocurrencyApi {
             }
         };
 
+        let self_ = self.clone();
+        let transaction_info = move |req: &mut Request| -> IronResult<Response> {
+            let router = req.extensions.get::<Router>().unwrap();
+            let tx_hash = router.find("tx_hash").unwrap();
+            let info = self_.get_transaction(tx_hash).unwrap();
+            self_.ok_response(&serde_json::to_value(info).unwrap())
+        };
+
         // Gets status of all wallets.
         let self_ = self.clone();
         let wallets_info = move |_: &mut Request| -> IronResult<Response> {
@@ -299,7 +316,7 @@ impl Api for CryptocurrencyApi {
             }
         };
 
-        // Gets status of the wallet corresponding to the public key.
+        // WIP  Gets transactions list associated with wallet corresponding to the public key.
         let self_ = self.clone();
         let wallet_transactions = move |req: &mut Request| -> IronResult<Response> {
             let router = req.extensions.get::<Router>().unwrap();
@@ -314,6 +331,7 @@ impl Api for CryptocurrencyApi {
 
         // Bind the transaction handler to a specific route.
         router.post("/v1/wallets/transaction", transaction, "transaction");
+        router.get("/v1/wallets/transactions/:tx_hash", transaction_info, "transaction_info");
         router.get("/v1/wallets", wallets_info, "wallets_info");
         router.get("/v1/wallet/:pub_key", wallet_info, "wallet_info");
         router.get("/v1/wallet/:pub_key/transactions", wallet_transactions, "wallet_transactions");
