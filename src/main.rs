@@ -15,7 +15,6 @@
 // Import crates with necessary types into a new project.
 
 extern crate serde;
-#[macro_use]
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
@@ -162,7 +161,7 @@ impl Transaction for TxCreateWallet {
     }
 
     fn info(&self) -> Value {
-        json!(self)
+        serde_json::to_value(self).unwrap()
     }
 }
 
@@ -193,7 +192,7 @@ impl Transaction for TxTransfer {
     }
 
     fn info(&self) -> Value {
-        json!(self)
+        serde_json::to_value(self).unwrap()
     }
 }
 
