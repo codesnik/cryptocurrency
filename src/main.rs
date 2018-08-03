@@ -37,6 +37,9 @@ use exonum::api::{Api, ApiError};
 use iron::prelude::*;
 use iron::Handler;
 use router::Router;
+use serde_json::Value;
+
+use exonum::explorer::{BlockchainExplorer};
 
 // // // // // // // // // // CONSTANTS // // // // // // // // // //
 
@@ -158,6 +161,10 @@ impl Transaction for TxCreateWallet {
             schema.wallets().put(self.pub_key(), wallet)
         }
     }
+
+    fn info(&self) -> Value {
+        serde_json::to_value(self).unwrap()
+    }
 }
 
 impl Transaction for TxTransfer {
@@ -184,6 +191,10 @@ impl Transaction for TxTransfer {
                 wallets.put(self.to(), receiver);
             }
         }
+    }
+
+    fn info(&self) -> Value {
+        serde_json::to_value(self).unwrap()
     }
 }
 
@@ -214,6 +225,13 @@ impl CryptocurrencyApi {
         } else {
             Some(wallets)
         }
+    }
+
+    fn get_transaction(&self, hash_str: &str) -> Option<Value> {
+        let hash = Hash::from_hex(&hash_str).unwrap();
+        let explorer = BlockchainExplorer::new(&self.blockchain);
+        let info = explorer.tx_info(&hash).unwrap().unwrap().content;
+        Some(info)
     }
 }
 
@@ -264,6 +282,14 @@ impl Api for CryptocurrencyApi {
             }
         };
 
+        let self_ = self.clone();
+        let transaction_info = move |req: &mut Request| -> IronResult<Response> {
+            let router = req.extensions.get::<Router>().unwrap();
+            let tx_hash = router.find("tx_hash").unwrap();
+            let info = self_.get_transaction(tx_hash).unwrap();
+            self_.ok_response(&serde_json::to_value(info).unwrap())
+        };
+
         // Gets status of all wallets.
         let self_ = self.clone();
         let wallets_info = move |_: &mut Request| -> IronResult<Response> {
@@ -280,8 +306,21 @@ impl Api for CryptocurrencyApi {
         // Gets status of the wallet corresponding to the public key.
         let self_ = self.clone();
         let wallet_info = move |req: &mut Request| -> IronResult<Response> {
-            let path = req.url.path();
-            let wallet_key = path.last().unwrap();
+            let router = req.extensions.get::<Router>().unwrap();
+            let wallet_key = router.find("pub_key").unwrap();
+            let public_key = PublicKey::from_hex(wallet_key).map_err(ApiError::FromHex)?;
+            if let Some(wallet) = self_.get_wallet(&public_key) {
+                self_.ok_response(&serde_json::to_value(wallet).unwrap())
+            } else {
+                self_.not_found_response(&serde_json::to_value("Wallet not found").unwrap())
+            }
+        };
+
+        // WIP  Gets transactions list associated with wallet corresponding to the public key.
+        let self_ = self.clone();
+        let wallet_transactions = move |req: &mut Request| -> IronResult<Response> {
+            let router = req.extensions.get::<Router>().unwrap();
+            let wallet_key = router.find("pub_key").unwrap();
             let public_key = PublicKey::from_hex(wallet_key).map_err(ApiError::FromHex)?;
             if let Some(wallet) = self_.get_wallet(&public_key) {
                 self_.ok_response(&serde_json::to_value(wallet).unwrap())
@@ -292,8 +331,10 @@ impl Api for CryptocurrencyApi {
 
         // Bind the transaction handler to a specific route.
         router.post("/v1/wallets/transaction", transaction, "transaction");
+        router.get("/v1/wallets/transactions/:tx_hash", transaction_info, "transaction_info");
         router.get("/v1/wallets", wallets_info, "wallets_info");
         router.get("/v1/wallet/:pub_key", wallet_info, "wallet_info");
+        router.get("/v1/wallet/:pub_key/transactions", wallet_transactions, "wallet_transactions");
     }
 }
 
